@@ -96,16 +96,6 @@ namespace UnityExplorer.CacheObject
         private static readonly Color evalEnabledColor = new(0.15f, 0.25f, 0.15f);
         private static readonly Color evalDisabledColor = new(0.15f, 0.15f, 0.15f);
 
-        public void XRef()
-        {
-            ExplorerCore.Log($"Xref For Method: {(this as CacheMethod)?.MethodInfo.Name}: {string.Join(", ", XrefScanner.XrefScan((this as CacheMethod)?.MethodInfo).Where(a => a.Type == XrefType.Global).Select(o => o.ReadAsObject().ToString()))}");
-        }
-
-        public void UsedBy()
-        {
-            ExplorerCore.Log($"UsedBy For Method: {(this as CacheMethod)?.MethodInfo.Name}: {string.Join(", ", XrefScanner.UsedBy((this as CacheMethod)?.MethodInfo).Where(a => a.Type == XrefType.Global).Select(o => o.TryResolve().ToString()))}");
-        }
-
         protected override bool TryAutoEvaluateIfUnitialized(CacheObjectCell objectcell)
         {
             CacheMemberCell cell = objectcell as CacheMemberCell;
