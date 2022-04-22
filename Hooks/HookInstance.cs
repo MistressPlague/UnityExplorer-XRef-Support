@@ -1,6 +1,7 @@
 ﻿using HarmonyLib;
 using Mono.CSharp;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -14,12 +15,14 @@ namespace UnityExplorer.Hooks
     {
         // Static 
 
-        private static readonly StringBuilder evalOutput = new();
-        private static readonly ScriptEvaluator scriptEvaluator = new(new StringWriter(evalOutput));
+        //static readonly StringBuilder evalOutput = new();
+        static readonly StringBuilder evaluatorOutput;
+        static readonly ScriptEvaluator scriptEvaluator = new(new StringWriter(evaluatorOutput = new StringBuilder()));
 
         static HookInstance()
         {
             scriptEvaluator.Run("using System;");
+            scriptEvaluator.Run("using System.Text;");
             scriptEvaluator.Run("using System.Reflection;");
             scriptEvaluator.Run("using System.Collections;");
             scriptEvaluator.Run("using System.Collections.Generic;");
@@ -42,7 +45,7 @@ namespace UnityExplorer.Hooks
         public HookInstance(MethodInfo targetMethod)
         {
             this.TargetMethod = targetMethod;
-            this.shortSignature = $"{targetMethod.DeclaringType.Name}.{targetMethod.Name}";
+            this.shortSignature = TargetMethod.FullDescription();
 
             GenerateDefaultPatchSourceCode(targetMethod);
 
@@ -59,15 +62,15 @@ namespace UnityExplorer.Hooks
         {
             Unpatch();
 
+            StringBuilder codeBuilder = new();
+
             try
             {
                 patchProcessor = ExplorerCore.Harmony.CreateProcessor(TargetMethod);
 
                 // Dynamically compile the patch method
 
-                StringBuilder codeBuilder = new();
-
-                codeBuilder.AppendLine($"public class DynamicPatch_{DateTime.Now.Ticks}");
+                codeBuilder.AppendLine($"static class DynamicPatch_{DateTime.Now.Ticks}");
                 codeBuilder.AppendLine("{");
                 codeBuilder.AppendLine(patchSource);
                 codeBuilder.AppendLine("}");
@@ -107,30 +110,59 @@ namespace UnityExplorer.Hooks
             }
             catch (Exception ex)
             {
-                ExplorerCore.LogWarning($"Exception creating patch processor for target method {TargetMethod.FullDescription()}!\r\n{ex}");
+                if (ex is FormatException)
+                {
+                    string output = scriptEvaluator._textWriter.ToString();
+                    string[] outputSplit = output.Split('\n');
+                    if (outputSplit.Length >= 2)
+                        output = outputSplit[outputSplit.Length - 2];
+                    evaluatorOutput.Clear();
+
+                    if (ScriptEvaluator._reportPrinter.ErrorsCount > 0)
+                        ExplorerCore.LogWarning($"Unable to compile the code. Evaluator's last output was:\r\n{output}");
+                    else
+                        ExplorerCore.LogWarning($"Exception generating patch source code: {ex}");
+                }
+                else
+                    ExplorerCore.LogWarning($"Exception generating patch source code: {ex}");
+
+                // ExplorerCore.Log(codeBuilder.ToString());
+
                 return false;
             }
+        }
+
+        static string FullDescriptionClean(Type type)
+        {
+            string description = type.FullDescription().Replace("+", ".");
+            if (description.EndsWith("&"))
+                description = $"ref {description.Substring(0, description.Length - 1)}";
+            return description;
         }
 
         private string GenerateDefaultPatchSourceCode(MethodInfo targetMethod)
         {
             StringBuilder codeBuilder = new();
-            // Arguments 
 
-            codeBuilder.Append("public static void Postfix(System.Reflection.MethodBase __originalMethod");
+            codeBuilder.Append("static void Postfix("); // System.Reflection.MethodBase __originalMethod
 
-            if (!targetMethod.IsStatic)
-                codeBuilder.Append($", {targetMethod.DeclaringType.FullName} __instance");
+            bool isStatic = targetMethod.IsStatic;
+            if (!isStatic)
+                codeBuilder.Append($"{FullDescriptionClean(targetMethod.DeclaringType)} __instance");
 
             if (targetMethod.ReturnType != typeof(void))
-                codeBuilder.Append($", {targetMethod.ReturnType.FullName} __result");
+            {
+                if (!isStatic)
+                    codeBuilder.Append(", ");
+                codeBuilder.Append($"{FullDescriptionClean(targetMethod.ReturnType)} __result");
+            }
 
             ParameterInfo[] parameters = targetMethod.GetParameters();
 
             int paramIdx = 0;
             foreach (ParameterInfo param in parameters)
             {
-                codeBuilder.Append($", {param.ParameterType.FullDescription().Replace("&", "")} __{paramIdx}");
+                codeBuilder.Append($", {FullDescriptionClean(param.ParameterType)} __{paramIdx}");
                 paramIdx++;
             }
 
@@ -139,42 +171,39 @@ namespace UnityExplorer.Hooks
             // Patch body
 
             codeBuilder.AppendLine("{");
-
             codeBuilder.AppendLine("    try {");
-
-            // Log message 
-
-            StringBuilder logMessage = new();
-            logMessage.Append($"Patch called: {shortSignature}\\n");
+            codeBuilder.AppendLine("       StringBuilder sb = new StringBuilder();");
+            codeBuilder.AppendLine($"       sb.AppendLine(\"---- Patched called ----\");");
+            codeBuilder.AppendLine($"       sb.AppendLine(\"{shortSignature}\");");
 
             if (!targetMethod.IsStatic)
-                logMessage.Append("__instance: {__instance.ToString()}\\n");
+                codeBuilder.AppendLine($"       sb.Append(\"- __instance: \").AppendLine(__instance.ToString());");
 
             paramIdx = 0;
             foreach (ParameterInfo param in parameters)
             {
-                logMessage.Append($"Parameter {paramIdx} {param.Name}: ");
+                codeBuilder.Append($"       sb.Append(\"- Parameter {paramIdx} '{param.Name}': \")");
+
                 Type pType = param.ParameterType;
                 if (pType.IsByRef) pType = pType.GetElementType();
                 if (pType.IsValueType)
-                    logMessage.Append($"{{__{paramIdx}.ToString()}}");
+                    codeBuilder.AppendLine($".AppendLine(__{paramIdx}.ToString());");
                 else
-                    logMessage.Append($"{{__{paramIdx}?.ToString() ?? \"null\"}}");
-                logMessage.Append("\\n");
+                    codeBuilder.AppendLine($".AppendLine(__{paramIdx}?.ToString() ?? \"null\");");
+
                 paramIdx++;
             }
 
             if (targetMethod.ReturnType != typeof(void))
             {
-                logMessage.Append("Return value: ");
+                codeBuilder.Append("       sb.Append(\"- Return value: \")");
                 if (targetMethod.ReturnType.IsValueType)
-                    logMessage.Append("{__result.ToString()}");
+                    codeBuilder.AppendLine(".AppendLine(__result.ToString());");
                 else
-                    logMessage.Append("{__result?.ToString() ?? \"null\"}");
-                logMessage.Append("\\n");
+                    codeBuilder.AppendLine(".AppendLine(__result?.ToString() ?? \"null\");");
             }
 
-            codeBuilder.AppendLine($"        UnityExplorer.ExplorerCore.Log($\"{logMessage}\");");
+            codeBuilder.AppendLine($"       UnityExplorer.ExplorerCore.Log(sb.ToString());");
             codeBuilder.AppendLine("    }");
             codeBuilder.AppendLine("    catch (System.Exception ex) {");
             codeBuilder.AppendLine($"        UnityExplorer.ExplorerCore.LogWarning($\"Exception in patch of {shortSignature}:\\n{{ex}}\");");

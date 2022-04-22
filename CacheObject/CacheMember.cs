@@ -31,8 +31,8 @@ namespace UnityExplorer.CacheObject
             this.Owner = inspector;
             this.NameLabelText = this switch
             {
-                CacheMethod => SignatureHighlighter.HighlightMethod(member as MethodInfo),
-                CacheConstructor => SignatureHighlighter.HighlightConstructor(member as ConstructorInfo),
+                CacheMethod => SignatureHighlighter.ParseMethod(member as MethodInfo),
+                CacheConstructor => SignatureHighlighter.ParseConstructor(member as ConstructorInfo),
                 _ => SignatureHighlighter.Parse(member.DeclaringType, false, member),
             };
 
@@ -96,6 +96,16 @@ namespace UnityExplorer.CacheObject
         private static readonly Color evalEnabledColor = new(0.15f, 0.25f, 0.15f);
         private static readonly Color evalDisabledColor = new(0.15f, 0.15f, 0.15f);
 
+        public void XRef()
+        {
+            ExplorerCore.Log($"Xref For Method: {(this as CacheMethod)?.MethodInfo.Name}: {string.Join(", ", XrefScanner.XrefScan((this as CacheMethod)?.MethodInfo).Where(a => a.Type == XrefType.Global).Select(o => o.ReadAsObject().ToString()))}");
+        }
+
+        public void UsedBy()
+        {
+            ExplorerCore.Log($"UsedBy For Method: {(this as CacheMethod)?.MethodInfo.Name}: {string.Join(", ", XrefScanner.UsedBy((this as CacheMethod)?.MethodInfo).Where(a => a.Type == XrefType.Global).Select(o => o.TryResolve().ToString()))}");
+        }
+
         protected override bool TryAutoEvaluateIfUnitialized(CacheObjectCell objectcell)
         {
             CacheMemberCell cell = objectcell as CacheMemberCell;
@@ -104,24 +114,8 @@ namespace UnityExplorer.CacheObject
             if (!ShouldAutoEvaluate)
             {
                 cell.EvaluateButton.Component.gameObject.SetActive(true);
-
-                if (this is CacheMethod method && !cell.Init)
-                {
-                    cell.XRefButton.OnClick += () =>
-                    {
-                        ExplorerCore.Log($"Xref For Method: {method.MethodInfo.Name}: {string.Join(", ", XrefScanner.XrefScan(method.MethodInfo).Where(a => a.Type == XrefType.Global).Select(o => o.ReadAsObject().ToString()))}");
-                    };
-
-                    cell.UsedByButton.OnClick += () =>
-                    {
-                        ExplorerCore.Log($"UsedBy For Method: {method.MethodInfo.Name}: {string.Join(", ", XrefScanner.UsedBy(method.MethodInfo).Where(a => a.Type == XrefType.Global).Select(o => o.TryResolve().ToString()))}");
-                    };
-
-                    cell.XRefButton.Component.gameObject.SetActive(true);
-                    cell.UsedByButton.Component.gameObject.SetActive(true);
-
-                    cell.Init = true;
-                }
+                cell.XRefButton.Component.gameObject.SetActive(true);
+                cell.UsedByButton.Component.gameObject.SetActive(true);
 
                 if (HasArguments)
                 {

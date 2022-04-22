@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿using System.Linq;
+using UnhollowerRuntimeLib.XrefScans;
+using UnityEngine;
 using UnityEngine.UI;
 using UniverseLib.UI;
 using UniverseLib.UI.Models;
@@ -11,9 +13,9 @@ namespace UnityExplorer.CacheObject.Views
 
         public GameObject EvaluateHolder;
         public ButtonRef EvaluateButton;
+
         public ButtonRef XRefButton;
         public ButtonRef UsedByButton;
-        public bool Init;
 
         protected virtual void EvaluateClicked()
         {
@@ -29,14 +31,17 @@ namespace UnityExplorer.CacheObject.Views
             UIFactory.SetLayoutElement(EvaluateHolder, minHeight: 25, flexibleWidth: 9999, flexibleHeight: 775);
 
             EvaluateButton = UIFactory.CreateButton(EvaluateHolder, "EvaluateButton", "Evaluate", new Color(0.15f, 0.15f, 0.15f));
-            UIFactory.SetLayoutElement(EvaluateButton.Component.gameObject, minWidth: 100, minHeight: 25);
+            UIFactory.SetLayoutElement(EvaluateButton.Component.gameObject, 100, 25);
             EvaluateButton.OnClick += EvaluateClicked;
 
             XRefButton = UIFactory.CreateButton(EvaluateHolder, "XRefButton", "XRef", new Color(0.15f, 0.15f, 0.15f));
-            UIFactory.SetLayoutElement(XRefButton.Component.gameObject, minWidth: 100, minHeight: 25);
+            UIFactory.SetLayoutElement(XRefButton.Component.gameObject, 100, 25);
 
             UsedByButton = UIFactory.CreateButton(EvaluateHolder, "UsedByButton", "Used By", new Color(0.15f, 0.15f, 0.15f));
-            UIFactory.SetLayoutElement(UsedByButton.Component.gameObject, minWidth: 100, minHeight: 25);
+            UIFactory.SetLayoutElement(UsedByButton.Component.gameObject, 100, 25);
+
+            XRefButton.OnClick += MemberOccupant.XRef;
+            UsedByButton.OnClick += MemberOccupant.UsedBy;
         }
     }
 }

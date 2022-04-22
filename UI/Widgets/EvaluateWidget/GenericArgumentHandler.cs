@@ -7,21 +7,21 @@ namespace UnityExplorer.UI.Widgets
 {
     public class GenericArgumentHandler : BaseArgumentHandler
     {
-        private Type genericType;
+        private Type genericArgument;
 
-        public void OnBorrowed(EvaluateWidget evaluator, Type genericConstraint)
+        public void OnBorrowed(Type genericArgument)
         {
-            this.evaluator = evaluator;
-            this.genericType = genericConstraint;
+            this.genericArgument = genericArgument;
 
             typeCompleter.Enabled = true;
-            typeCompleter.BaseType = genericType;
-            typeCompleter.CacheTypes();
+            typeCompleter.BaseType = this.genericArgument;
 
-            Type[] constraints = genericType.GetGenericParameterConstraints();
+            Type[] constraints = this.genericArgument.GetGenericParameterConstraints();
             typeCompleter.GenericConstraints = constraints;
 
-            StringBuilder sb = new($"<color={SignatureHighlighter.CONST}>{genericType.Name}</color>");
+            typeCompleter.CacheTypes();
+
+            StringBuilder sb = new($"<color={SignatureHighlighter.CONST}>{this.genericArgument.Name}</color>");
 
             for (int j = 0; j < constraints.Length; j++)
             {
@@ -39,8 +39,7 @@ namespace UnityExplorer.UI.Widgets
 
         public void OnReturned()
         {
-            this.evaluator = null;
-            this.genericType = null;
+            this.genericArgument = null;
 
             this.typeCompleter.Enabled = false;
 
